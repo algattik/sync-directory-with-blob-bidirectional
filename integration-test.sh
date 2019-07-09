@@ -9,8 +9,10 @@ BASENAME=$1
 RESOURCE_GROUP=$BASENAME
 LOCATION=northeurope
 export AZURE_STORAGE_ACCOUNT=$BASENAME
-export IMPORT_CONTAINER=import
-export EXPORT_CONTAINER=export
+
+uniquestr=$(date +%s)
+export IMPORT_CONTAINER=import$uniquestr
+export EXPORT_CONTAINER=export$uniquestr
 
 echo '[Integration test] creating resource group'
 echo "[Integration test] . name: $RESOURCE_GROUP"
@@ -36,71 +38,70 @@ echo "[Integration test] Running"
 ./run-utility.sh &
 utility_pid=$!
 
-prefix=$(date +%s)
 
 ##### EXPORT TESTS ####
 
 echo "[Integration test] Uploading export blobs"
-az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --file /dev/null --name "blob_created1$prefix" -o none
-az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --file /dev/null --name "blob_created2$prefix" -o none
+az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --file /dev/null --name "blob_created1$uniquestr" -o none
+az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --file /dev/null --name "blob_created2$uniquestr" -o none
 
 sleep 10
 echo "[Integration test] Asserting files were copied"
-test -f "$EXPORT_FOLDER/blob_created1$prefix"
-test -f "$EXPORT_FOLDER/blob_created2$prefix"
+test -f "$EXPORT_FOLDER/blob_created1$uniquestr"
+test -f "$EXPORT_FOLDER/blob_created2$uniquestr"
 
 echo "[Integration test] Deleting local export"
-rm "$EXPORT_FOLDER/blob_created1$prefix"
+rm "$EXPORT_FOLDER/blob_created1$uniquestr"
 
 sleep 5
 echo "[Integration test] Asserting export files"
-test ! -f "$EXPORT_FOLDER/blob_created1$prefix"
-test -f "$EXPORT_FOLDER/blob_created2$prefix"
+test ! -f "$EXPORT_FOLDER/blob_created1$uniquestr"
+test -f "$EXPORT_FOLDER/blob_created2$uniquestr"
 echo "[Integration test] Asserting export blobs"
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --name "blob_created1$prefix" -o none 2>/dev/null && exit 1
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --name "blob_created2$prefix" -o none
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --name "blob_created1$uniquestr" -o none 2>/dev/null && exit 1
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$EXPORT_CONTAINER" --name "blob_created2$uniquestr" -o none
 echo "[Integration test] Export tests complete"
 
 ##### IMPORT TESTS ####
 
-echo "[Integration test] Content" > $IMPORT_FOLDER/file_created1$prefix
-echo "[Integration test] Content" > $IMPORT_FOLDER/file_created2$prefix
-tail -f /dev/null > $IMPORT_FOLDER/file_being_written_to$prefix &
+echo "[Integration test] Content" > $IMPORT_FOLDER/file_created1$uniquestr
+echo "[Integration test] Content" > $IMPORT_FOLDER/file_created2$uniquestr
+tail -f /dev/null > $IMPORT_FOLDER/file_being_written_to$uniquestr &
 writing_pid=$!
 
 sleep 10
 echo "[Integration test] Asserting files were copied"
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$prefix" -o none
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created2$prefix" -o none
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$prefix" -o none 2>/dev/null && exit 1
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$uniquestr" -o none
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created2$uniquestr" -o none
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$uniquestr" -o none 2>/dev/null && exit 1
 
 echo "[Integration test] Asserting files were retained"
-test -f "$IMPORT_FOLDER/file_created1$prefix"
-test -f "$IMPORT_FOLDER/file_created2$prefix"
-test -f "$IMPORT_FOLDER/file_being_written_to$prefix"
+test -f "$IMPORT_FOLDER/file_created1$uniquestr"
+test -f "$IMPORT_FOLDER/file_created2$uniquestr"
+test -f "$IMPORT_FOLDER/file_being_written_to$uniquestr"
 
 echo "[Integration test] Deleting one file in blob container"
-az storage blob delete --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$prefix" -o none
+az storage blob delete --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$uniquestr" -o none
 sleep 5
 
 echo "[Integration test] Asserting one file was deleted locally"
-test ! -f "$IMPORT_FOLDER/file_created1$prefix"
+test ! -f "$IMPORT_FOLDER/file_created1$uniquestr"
 
 echo "[Integration test] Asserting other files were retained locally"
-test -f "$IMPORT_FOLDER/file_created2$prefix"
-test -f "$IMPORT_FOLDER/file_being_written_to$prefix"
+test -f "$IMPORT_FOLDER/file_created2$uniquestr"
+test -f "$IMPORT_FOLDER/file_being_written_to$uniquestr"
 
 echo "[Integration test] Asserting files were not copied again"
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$prefix" -o none 2>/dev/null && exit 1
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created2$prefix" -o none
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$prefix" -o none 2>/dev/null && exit 1
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created1$uniquestr" -o none 2>/dev/null && exit 1
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_created2$uniquestr" -o none
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$uniquestr" -o none 2>/dev/null && exit 1
 
 echo "[Integration test] Releasing file being written to"
 kill $writing_pid
 wait $writing_pid || true
 sleep 5
 echo "[Integration test] Asserting file was copied"
-az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$prefix" -o none
+az storage blob show --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "file_being_written_to$uniquestr" -o none
 echo "[Integration test] Terminating utility"
 kill $utility_pid
 wait $utility_pid || true

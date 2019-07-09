@@ -8,7 +8,6 @@ list_blobs() {
 	resultsPerPage=30
 	blobList=$(mktemp)
 	azStdErr=$(mktemp)
-	echo "[Utility] Querying export container" >&2
 	while true; do
  		az storage blob list --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --num-results $resultsPerPage --marker "$marker" "$@" >>$blobList 2>$azStdErr
 		if grep error $azStdErr; then cat $azStdErr >&2; exit 98; fi
@@ -20,6 +19,7 @@ list_blobs() {
 }
 	
 export_process() {
+	echo "[Utility] Querying export container" >&2
 	blobList=$(list_blobs --container "$EXPORT_CONTAINER" --include m --query '[].[name,metadata.syncertag]' -o tsv)
 	
 	local IFS=$'\n'
@@ -54,33 +54,24 @@ is_file_being_written() {
 }
 
 import_process() {
+	echo "[Utility] Querying import container" >&2
+	blobList=$(list_blobs --container "$IMPORT_CONTAINER" --include d --query '[].[name,deleted]' -o tsv)
 	for filename in $IMPORT_FOLDER/* ; do
 		[ -f "$filename" ] || continue
 		basename=$(basename "$filename")
-		delete_status=$(az storage blob list --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container "$IMPORT_CONTAINER" --prefix "$basename" --num-results '*' --include d | jq ".[] | select (.name==\"$basename\").deleted")
-		echo "[Utility] ($basename) -> ($delete_status)" >&2
-
-		case "delete_status_$delete_status" in
-        		delete_status_) #new file
-            			if ! is_file_being_written "$filename"; then
-					echo "[Utility] Uploading $basename" >&2
-					az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "$basename" --file "$filename" -o none
-				else
-					echo "[Utility] Ignoring $basename, concurrent process is writing" >&2
-				fi
-            		;;
-        		delete_status_true) #deleted blob
-				echo "[Utility] Deleting local file $basename" >&2
-				rm "$filename"
-            		;;
-        		delete_status_false) #already copied file
-				echo "[Utility] Ignoring already copied file $basename" >&2
-            		;;
-        		*) #unexpected jq output
-				echo "[Utility] Unexpected jq output: $delete_status" >&2
-				exit 99
-            		;;
-		esac
+		if grep -F -x "$basename"$'\t'"False" $blobList; then
+			echo "[Utility] Ignoring already copied file $basename" >&2
+		elif grep -F -x "$basename"$'\t'"True" $blobList; then
+			echo "[Utility] Deleting local file $basename" >&2
+			rm "$filename"
+		else
+        		if ! is_file_being_written "$filename"; then
+				echo "[Utility] Uploading $basename" >&2
+				az storage blob upload --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --container-name "$IMPORT_CONTAINER" --name "$basename" --file "$filename" -o none
+			else
+				echo "[Utility] Ignoring $basename, concurrent process is writing" >&2
+			fi
+		fi
 	done
 }
 
